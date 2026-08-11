@@ -1,0 +1,42 @@
+# Dependencies — reinstalled from package-lock.json by the Docker build.
+# Committing these adds ~135MB and breaks reproducibility.
+node_modules/
+npm-debug.log*
+.npm/
+
+# ---------------------------------------------------------------------------
+# Credentials. A Ring refresh token grants FULL access to the account, so
+# nothing that can hold one belongs in a repo — least of all a public one.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*refresh-token*
+secrets/
+
+# Compose overrides commonly hold real tokens and host-specific paths.
+# The committed compose.*.yaml files carry placeholders only.
+compose.override.yaml
+compose.override.yml
+docker-compose.override.yaml
+docker-compose.override.yml
+
+# Local token state and captured media.
+data/
+config/
+recordings/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.part
+
+# Editor and OS noise.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Local Claude Code settings.
+.claude/settings.local.json

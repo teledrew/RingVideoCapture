@@ -1,0 +1,103 @@
+services:
+  ring-recorder:
+    build:
+      context: .
+      args:
+        # Node runtime inside the image; independent of the host's Node version.
+        NODE_VERSION: ${NODE_VERSION:-22}
+    image: ring-recorder
+    container_name: ring-recorder
+    restart: unless-stopped
+
+    environment:
+      # Only needed for the very first run. Once the container has connected it
+      # persists rotated tokens to /data and this value is ignored.
+      RING_REFRESH_TOKEN: ${RING_REFRESH_TOKEN:-}
+
+      # Comma-separated camera names. Leave unset to monitor every camera.
+      CAMERA_NAMES: ${CAMERA_NAMES:-}
+
+      RECORD_SECONDS: ${RECORD_SECONDS:-30}
+      # RECORD_SECONDS is the minimum. Recordings run on while Ring keeps
+      # reporting activity, stopping EXTEND_SECONDS after the last sign of it,
+      # so a visitor who lingers is not cut off mid-event.
+      EXTEND_ON_ACTIVITY: ${EXTEND_ON_ACTIVITY:-true}
+      EXTEND_SECONDS: ${EXTEND_SECONDS:-20}
+      MAX_RECORD_SECONDS: ${MAX_RECORD_SECONDS:-120}
+      COOLDOWN_SECONDS: ${COOLDOWN_SECONDS:-60}
+      CAPTURE_SNAPSHOT: ${CAPTURE_SNAPSHOT:-true}
+      # Which frame of the recording becomes the thumbnail. Not 0: the opening
+      # moments of a Ring stream are usually a grey, half-decoded keyframe.
+      THUMBNAIL_OFFSET_SECONDS: ${THUMBNAIL_OFFSET_SECONDS:-2}
+      RECORD_MOTION: ${RECORD_MOTION:-true}
+      RECORD_DING: ${RECORD_DING:-true}
+
+      RETENTION_DAYS: ${RETENTION_DAYS:-14}
+      RETENTION_MAX_GB: ${RETENTION_MAX_GB:-20}
+
+      # Ownership for saved files. Set to the host user that should own the
+      # recordings (`id -u` / `id -g`) so they are readable outside the
+      # container. Ignored on Docker Desktop, which remaps ownership itself.
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+
+      # Permissions for saved videos and snapshots. 644 keeps them readable by
+      # other host users; use 600 to restrict to the owner.
+      FILE_MODE: ${FILE_MODE:-644}
+
+      # Logged at startup so the host-side location is visible in the logs.
+      HOST_OUTPUT_PATH: ${RECORDINGS_PATH:-./recordings}
+
+      # ---- Read-only web UI for browsing recordings -------------------------
+      WEB_ENABLED: ${WEB_ENABLED:-false}
+      WEB_PORT: ${WEB_PORT:-8080}
+
+      # HTTP basic auth. Both must be set, or both empty for no authentication.
+      # Strongly recommended unless the port is unreachable from anything you do
+      # not control: this serves video of your front door.
+      WEB_USERNAME: ${WEB_USERNAME:-}
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+
+      # Optional CIDRs whose clients skip the password, e.g. "192.168.1.0/24", or
+      # "default" for the usual private ranges.
+      #
+      # Only works where the app sees real client addresses. On a Docker bridge
+      # network every request appears to come from the bridge gateway, so any rule
+      # matching it would exempt *all* traffic — including anything arriving via a
+      # port forward. Check GET /whoami: if `remoteAddress` is not the real client
+      # IP, leave this empty. 172.16.0.0/12 is excluded from "default" for this
+      # reason, as that is where Docker's own bridges live.
+      TRUSTED_NETWORKS: ${TRUSTED_NETWORKS:-}
+
+      DEBUG: ${DEBUG:-false}
+      TZ: ${TZ:-Europe/London}
+
+    # Uncomment alongside WEB_ENABLED=true. Left commented so the default config
+    # does not claim a host port for a server that is not running — Compose has no
+    # way to publish a port conditionally. Not needed under network_mode: host,
+    # where WEB_PORT is already reachable directly.
+    # ports:
+    #   - "${WEB_HOST_PORT:-8080}:${WEB_PORT:-8080}"
+
+    volumes:
+      # Where recordings land, visible on the host at RECORDINGS_PATH.
+      - ${RECORDINGS_PATH:-./recordings}:/recordings
+      # Token state. Must persist across restarts or push notifications break.
+      # Swap for a bind mount (e.g. ./config:/data) if you want it visible and
+      # easy to back up.
+      - ring-recorder-data:/data
+
+    # WebRTC streaming needs outbound UDP to Ring's media servers. Host
+    # networking is the most reliable option on Linux; on Docker Desktop
+    # (macOS/Windows) it is ignored and the default bridge is used, which
+    # generally still works for outbound-only streams.
+    network_mode: ${NETWORK_MODE:-bridge}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  ring-recorder-data:

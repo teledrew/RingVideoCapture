@@ -1,0 +1,118 @@
+# Synology Container Manager (DSM 7.2+) project file.
+#
+# Differences from compose.yaml, all driven by Container Manager's constraints:
+#   - No ${VAR} interpolation: Container Manager does not read a .env file when
+#     you paste/upload a project, so every value is written literally here.
+#     Edit the marked lines directly before creating the project.
+#   - Absolute host paths: bind mounts must point at real DSM share paths
+#     (/volume1/...), not relative ./paths.
+#   - Bind mount for /data instead of a named volume, so the refresh token is
+#     visible and backup-able via File Station rather than buried in
+#     /var/lib/docker.
+#   - No `network_mode: host` — Container Manager's UI does not support it and
+#     it is unnecessary here, as the WebRTC streams are outbound only.
+#
+# Setup:
+#   1. Create shared folders (File Station), e.g. "ring" with subfolders
+#      "recordings" and "config". Adjust the paths below to match.
+#   2. Find the uid/gid that owns them, via SSH: `id your-dsm-user`
+#      Typical DSM users start at uid 1026. Put those in PUID/PGID below.
+#   3. Container Manager -> Project -> Create -> upload this file.
+
+services:
+  ring-recorder:
+    # Container Manager can build from a Dockerfile in the project folder.
+    # Alternatively build elsewhere for linux/amd64 and load the image, or push
+    # to a registry and swap `build` for `image:`.
+    build:
+      context: .
+      args:
+        NODE_VERSION: "22"
+    image: ring-recorder
+    container_name: ring-recorder
+    restart: unless-stopped
+
+    environment:
+      # ---- EDIT: paste the token from `ring-auth-cli` (first run only) -------
+      RING_REFRESH_TOKEN: "PASTE_YOUR_REFRESH_TOKEN_HERE"
+
+      # ---- EDIT: uid/gid owning the shared folders (see `id your-dsm-user`) --
+      # Getting these right is what makes recordings readable in File Station
+      # and over SMB. DSM users typically start at 1026; 100 is the `users` group.
+      PUID: "1026"
+      PGID: "100"
+
+      # ---- EDIT: shown in logs so the path is meaningful outside the container
+      HOST_OUTPUT_PATH: "/volume1/ring/recordings"
+
+      # Leave empty to monitor every camera, or list exact Ring app names.
+      CAMERA_NAMES: ""
+
+      RECORD_SECONDS: "30"
+      # RECORD_SECONDS is the minimum. Recordings run on while Ring keeps
+      # reporting activity, stopping EXTEND_SECONDS after the last sign of it,
+      # so a visitor who lingers is not cut off mid-event.
+      EXTEND_ON_ACTIVITY: "true"
+      EXTEND_SECONDS: "20"
+      MAX_RECORD_SECONDS: "120"
+      COOLDOWN_SECONDS: "60"
+      CAPTURE_SNAPSHOT: "true"
+      # Which frame of the recording becomes the thumbnail. Not 0: the opening
+      # moments of a Ring stream are usually a grey, half-decoded keyframe.
+      THUMBNAIL_OFFSET_SECONDS: "2"
+      RECORD_MOTION: "true"
+      RECORD_DING: "true"
+
+      # 0644 so the files are readable over SMB/DSM by other users.
+      FILE_MODE: "644"
+
+      # NAS volumes are large; raise these if you have room to spare.
+      RETENTION_DAYS: "14"
+      RETENTION_MAX_GB: "20"
+
+      TZ: "Europe/London"
+      DEBUG: "false"
+
+      # ---- Read-only web UI for browsing recordings -------------------------
+      # Off by default: it serves video of your front door, so turn it on
+      # deliberately. Set "true" here and uncomment the `ports:` block below.
+      WEB_ENABLED: "false"
+      WEB_PORT: "8080"
+
+      # ---- EDIT if WEB_ENABLED is true: HTTP basic auth ----------------------
+      # Both must be set, or both left empty for no authentication at all.
+      # Set them unless you are certain nothing untrusted can reach the port —
+      # guest Wi-Fi and IoT devices on the same LAN can.
+      WEB_USERNAME: ""
+      WEB_PASSWORD: ""
+
+      # CIDRs whose clients skip the password. Leave empty on Container Manager:
+      # its bridge network rewrites every client address to the Docker gateway
+      # (typically 172.x.x.1), so no rule can tell a LAN client from any other —
+      # one that matched the gateway would exempt *everything*. Confirm with
+      # `curl http://<nas-ip>:8123/whoami`, which reports the address the
+      # container actually sees.
+      TRUSTED_NETWORKS: ""
+
+    # Uncomment with WEB_ENABLED=true. Host port 8123 stays clear of DSM's own
+    # services, which claim 8080 and several nearby ports. Then browse to
+    # http://<nas-ip>:8123 — never forward this port from the internet.
+    # ports:
+    #   - "8123:8080"
+
+    volumes:
+      # ---- EDIT: point these at your actual DSM shared folders --------------
+      - /volume1/ring/recordings:/recordings
+      # Holds the rotated refresh token. MUST persist across restarts and
+      # container recreation, or push notifications break permanently.
+      - /volume1/ring/config:/data
+
+    # Synology's DSM reserves a lot of RAM; cap the container so a runaway
+    # ffmpeg cannot destabilise the NAS. Recording one stream needs far less.
+    mem_limit: 1g
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

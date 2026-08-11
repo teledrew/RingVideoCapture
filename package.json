@@ -1,0 +1,30 @@
+{
+  "name": "ring-recorder",
+  "version": "1.0.0",
+  "description": "Monitors a Ring doorbell for motion and doorbell presses, recording video and a snapshot to a local directory",
+  "keywords": [
+    "ring",
+    "doorbell",
+    "recorder",
+    "motion",
+    "docker",
+    "synology",
+    "nas",
+    "self-hosted"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js",
+    "auth": "ring-auth-cli"
+  },
+  "dependencies": {
+    "ring-client-api": "^14.3.0",
+    "rxjs": "^7.8.2"
+  },
+  "engines": {
+    "node": "^20 || ^22 || ^24"
+  }
+}
