@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Lets you re-run the suite by hand from the Actions tab, which is useful when a
+  # failure looks like a timing flake rather than a real regression.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Report every version's result. Without this, one failure cancels the others
+      # and hides whether the problem is version-specific or universal.
+      fail-fast: false
+      matrix:
+        # The range declared in package.json "engines". Testing the boundaries
+        # catches a dependency that quietly drops support for the oldest version.
+        node: ['20', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` rather than `npm install`: installs exactly what package-lock.json
+      # pins and fails if the lockfile is out of step with package.json, so CI cannot
+      # pass against a dependency tree that no one has committed.
+      - run: npm ci
+
+      # The suite exercises the recording-extension logic against real timers, so it
+      # takes ~60s. The default 360-minute job timeout would let a hung test burn
+      # build minutes for hours; 10 minutes is generous but bounded.
+      - run: npm test
+        timeout-minutes: 10

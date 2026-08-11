@@ -1,5 +1,7 @@
 # ring-recorder
 
+[![Tests](https://github.com/teledrew/RingVideoCapture/actions/workflows/test.yml/badge.svg)](https://github.com/teledrew/RingVideoCapture/actions/workflows/test.yml)
+
 Watches Ring cameras and doorbells for **motion** and **doorbell presses**, and saves
 each event as an MP4 plus a JPEG thumbnail in a directory you own. Runs as a
 long-lived Docker service. Optional read-only web UI for browsing what it caught.
@@ -486,6 +488,11 @@ Plain JavaScript, ES modules, no build step, no transpiler. Two runtime
 dependencies (`ring-client-api` and `rxjs`); the HTTP server, file watching, CIDR
 parsing and range handling are all Node stdlib. Tests use the built-in
 `node:test` runner.
+
+CI runs the same suite on Node 20, 22 and 24 for every push and pull request
+(`.github/workflows/test.yml`). Run tests as a normal user, not root: one test asserts
+that an unwritable token directory is rejected, and root bypasses the permission bit
+that makes it unwritable, so the test fails as root on every Node version.
 
 `ring-client-api` supports Node `^20 || ^22 || ^24`, so run tests on a supported
 Node locally, or in the container:
